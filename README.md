@@ -1,154 +1,83 @@
-# Diabetes Risk Prediction (Clinical Indicators + SHAP-driven Feature Engineering)
+# Diabetes Risk Prediction
 
-This project builds an end-to-end machine learning pipeline for diabetes risk prediction using clinical and lifestyle indicators. The workflow emphasises interpretability and robust model validation by combining:
+This repository contains an end-to-end machine learning workflow for predicting diabetes risk using clinical and lifestyle indicators, built as an entry to the **Kaggle Diabetes Prediction Challenge**.
 
-- **Model-based EDA using SHAP**
-- **Clinically motivated feature engineering**
-- **Leakage-safe AI-based threshold binning**
-- Strong tabular models (**CatBoost + LightGBM**) with hyperparameter tuning (Optuna)
-
----
-
-## Project Method Overview
-
-### 1) Model-based EDA with CatBoost + SHAP
-Instead of relying only on correlation tables or univariate plots, this project uses **model-based EDA**:
-
-- A **baseline CatBoost classifier** is trained first as an interpretable and strong tabular benchmark.
-- SHAP values are computed to:
-  - rank feature importance,
-  - visualize non-linear feature effects,
-  - inspect potential interactions / redundancy using SHAP dependence plots.
-
-This guides downstream feature engineering decisions.
+The pipeline emphasizes both **predictive performance** and **interpretability**, combining:
+- model-based EDA (**CatBoost + SHAP**),
+- clinically motivated feature engineering,
+- leakage-safe **AI-based threshold binning**,
+- strong tabular models (**CatBoost + LightGBM**) with **Optuna** tuning.
 
 ---
 
-## Feature Engineering Approaches
+## Notebook Sequence (and what each notebook does)
 
-Clinical metrics often contain threshold-driven meaning (e.g. obese BMI, high BP, elevated cholesterol). This motivates creating derived features aligned with real screening logic.
+### 1) `EDA.ipynb` — Model-based EDA using CatBoost and SHAP
+This notebook performs interpretability-driven EDA:
+- trains a **baseline CatBoost classifier** as a strong tabular benchmark
+- computes **SHAP values** to obtain:
+  - global feature importance
+  - SHAP dependence plots (non-linear effects + feature interaction patterns)
 
-This repo experiments with three main feature strategies:
-
-### A) Clinical indicator features (domain-based)
-Threshold/flag features based on established clinical cut-offs such as:
-- BMI categories
-- Hypertension thresholds
-- Lipid panel thresholds
-- Lifestyle risk flags
-
-These features provide clearer “risk signals” and improve interpretability.
-
-### B) Threshold binning (discretization)
-Continuous features are discretized to reduce noise and help models learn stable patterns. Two binning methods are tested:
-
-1. **Simple quantile binning**
-   - Fixed **20 bins** per continuous feature (heuristic baseline)
-
-2. **AI-based binning via Decision Trees**
-   - Fit a **single-feature decision tree** to predict `y`
-   - Extract split thresholds as bin edges
-   - Use `max_depth = 3` → up to **8 bins (2³)**  
-     (keeps bins interpretable + limits overfitting)
-
-✅ AI-binning is **supervised** (uses `y`) → must be done inside CV to avoid leakage.
-
-### C) Selective binning (final approach)
-For CatBoost, threshold bins are applied **only to the most important features**, based on feature importance plots, since binning everything adds noise/redundancy.
+Rationale: SHAP-based EDA provides more useful guidance for feature engineering than correlation-only approaches, especially for non-linear clinical risk signals.
 
 ---
 
-## Model Training & Evaluation
+### 2) `clinical_indicators_baseline.ipynb` — Clinical threshold indicator features
+This notebook performs clinically motivated feature engineering:
+- constructs **threshold-based indicator features** (risk flags) aligned with screening logic  
+  (e.g., BMI categories, hypertension ranges, lipid thresholds)
+- trains baseline models:
+  - Logistic Regression (LR)
+  - Random Forest (RF)
+  - CatBoost
+  - LightGBM (LGBM)
+- evaluates models using stratified CV AUC + feature importance comparison
 
-### Baseline models
-This repo trains and compares 4 core models:
-
-- **Logistic Regression (LR)**  
-  Interpretable linear baseline.
-- **Random Forest (RF)**  
-  Bagging trees; naturally captures thresholds and interactions.
-- **CatBoost**  
-  Strong tabular performance; strong with categorical/indicator/bin features.
-- **LightGBM (LGBM)**  
-  Efficient boosting model; excels with raw continuous features.
-
-### Validation strategy
-- **Stratified 3-Fold Cross-Validation**
-- Out-of-fold (OOF) predictions to estimate generalization fairly
-- Primary metric: **ROC-AUC**
-  - Measures ranking quality across all decision thresholds
-  - Robust to threshold selection and mild class imbalance
+Rationale: Many clinical variables are interpreted via thresholds; converting raw values into risk ranges can create clearer predictive signals.
 
 ---
 
-## Final Models
+### 3) `threshold_bins_baseline.ipynb` — Threshold binning experiments
+This notebook evaluates discretisation-based feature engineering:
+- **Simple quantile binning** (20 bins) as a baseline discretisation method
+- **AI-based binning**:
+  - fit single-feature decision trees (max_depth = 3)
+  - extract split thresholds as bin edges (up to 8 bins)
 
-Based on CV performance and empirical testing:
-
-### ✅ Final CatBoost
-- Uses **selective threshold bins** (only top features)
-- Binning provides a small but consistent AUC gain over baseline
-
-### ✅ Final LightGBM
-- Uses **raw features only**
-- Trial-and-error showed bins reduced AUC, likely because LGBM already learns optimal thresholds from raw features
+To prevent leakage, decision-tree binning (which uses `y`) is performed **inside stratified CV**, ensuring bin thresholds are learned only from training folds before applying to validation folds.
 
 ---
 
-## Hyperparameter Tuning (Optuna)
+### 4) `final_model_1.ipynb` — Final models + Optuna tuning
+This notebook consolidates final model selection and tuning:
+- final model family: **CatBoost + LightGBM**
+- CatBoost:
+  - uses **selective threshold bin features** applied only to top continuous predictors
+  - tuned using Optuna (`depth`, `learning_rate`, `l2_leaf_reg`, `one_hot_max_size`)
+- LightGBM:
+  - uses **raw features only**
+  - tuned using Optuna (`learning_rate`, `num_leaves`, `max_depth`, `min_child_samples`)
 
-Optuna tuning focuses on the most impactful bias–variance tradeoff parameters:
-
-### CatBoost search space
-- `depth`: tree complexity / interactions
-- `learning_rate`: convergence stability
-- `l2_leaf_reg`: regularization against overfitting
-- `one_hot_max_size`: categorical encoding complexity
-
-### LightGBM search space
-- `learning_rate`: convergence stability
-- `num_leaves`: main capacity parameter
-- `max_depth`: structure constraint to avoid overfitting
-- `min_child_samples`: leaf-level regularization
+Rationale:
+- CatBoost benefits slightly from selective binning on key predictors
+- LightGBM performs best on raw continuous inputs (bins reduced AUC empirically)
 
 ---
 
-## Notebooks (Run Order)
+## Results (Cross-Validated ROC-AUC)
 
-### 1. `EDA.ipynb`
-**Model-based EDA using CatBoost + SHAP**
-- Train baseline CatBoost
-- SHAP feature importance
-- SHAP dependence plots (non-linearity + interaction patterns)
-- Extract insights for feature engineering
+| Model | Indicators AUC (mean ± std) | Threshold Bins AUC (mean ± std) |
+|------|------------------------------|----------------------------------|
+| LR   | 0.695020 ± 0.000367          | 0.698481 ± 0.000595              |
+| RF   | 0.701064 ± 0.000347          | 0.702733 ± 0.000601              |
+| CatBoost | 0.723791 ± 0.000489      | **0.724559 ± 0.000364**          |
+| LightGBM | **0.725294 ± 0.000474**  | 0.722209 ± 0.000250              |
 
-### 2. `clinical_indicators_baseline.ipynb`
-**Indicator/threshold feature engineering**
-- Create clinically meaningful risk flags
-- Train baseline models (LR/RF/CatBoost/LGBM) using engineered indicator features
-- Compare AUC + interpret feature importance
+Baseline reference:
+- CatBoost baseline (raw features): **0.723558**
 
-### 3. `threshold_bins_baseline.ipynb`
-**Threshold binning experiments**
-- Simple quantile binning (20 bins)
-- AI-based binning using decision tree thresholds (`max_depth=3`)
-- Leakage-safe integration of AI-binning inside CV
-- Model comparisons under binned feature representations
-
-### 4. `final_model_1.ipynb`
-**Final models + Optuna tuning**
-- Final CatBoost (selective bins + Optuna tuning)
-- Final LightGBM (raw features + Optuna tuning)
-- Consolidated training pipeline and evaluation
-
----
-
-## Repo Notes
-
-### Data
-Training and test CSVs are **not included** in the repo (excluded via `.gitignore`) to prevent:
-- file size issues on GitHub
-- redistribution of restricted datasets
-- accidental data leakage
-
-Place your data locally (example):
+Summary:
+- Boosting models (CatBoost / LightGBM) consistently achieve the best performance (AUC ≈ 0.72–0.73)
+- Threshold bins provide a small uplift for CatBoost relative to baseline
+- LightGBM still performs best using raw features, suggesting that discretisation is unnecessary for LGBM on this dataset
