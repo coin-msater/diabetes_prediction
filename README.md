@@ -57,7 +57,6 @@ This notebook explores **variable discretization** (binning) to handle non-linea
     - **Logistic Regression** showed improvement from the addition of binned features, suggesting that binning helps linear models by introducing structured non-linearity.
     - **LightGBM** showed a strong preference for **Simple Bins**, suggesting that smoothing continuous noise helped the gradient boosting algorithm find cleaner splits.
     - **CatBoost** maintained a balanced reliance on **Raw Features** (Family History, Activity) while effectively utilizing **AI-Bins** for specific metabolic markers (e.g., triglycerides), proving that binned features serve as powerful non-linear representations.
-    - 
 
 **Rationale:**
 While tree-based models can naturally handle continuous data, they often waste splits trying to approximate simple step functions or overfit to minor fluctuations in the data. By explicitly providing "AI-optimized" bins (e.g., grouping Age into clusters where diabetes risk is statistically similar), we inject domain-specific non-linearity directly into the dataset, allowing the model to focus on higher-order interactions rather than finding basic thresholds.
